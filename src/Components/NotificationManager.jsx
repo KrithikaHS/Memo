@@ -18,17 +18,25 @@ export function NotificationManager() {
     });
 
     const { toast } = useToast();
-    const [permission, setPermission] = useState(Notification.permission);
+    const [permission, setPermission] = useState('default');
     const notifiedRef = useRef(new Set());
     const hasCheckedMissed = useRef(false);
 
     useEffect(() => {
-        if (!("Notification" in window)) {
-            console.warn("This browser does not support desktop notification");
-            return;
+        try {
+            if (!("Notification" in window)) {
+                // Safely ignore if not supported
+                return;
+            }
+            setPermission(Notification.permission);
+        } catch (e) {
+            console.warn("Notification API access failed", e);
         }
+    }, []);
 
-        if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+    const requestPermission = () => {
+        if (!("Notification" in window)) return;
+        try {
             Notification.requestPermission().then((p) => {
                 setPermission(p);
                 if (p === 'granted') {
@@ -37,9 +45,35 @@ export function NotificationManager() {
                         description: "You'll receive alerts for your reminders.",
                     });
                 }
-            });
+            }).catch(err => console.error("Permission request failed", err));
+        } catch (e) {
+            console.error("Notification API error", e);
         }
-    }, [toast]);
+    };
+
+    const sendNotification = (title, options) => {
+        try {
+            if (!("Notification" in window) || Notification.permission !== "granted") return;
+            new Notification(title, options);
+        } catch (e) {
+            console.error("Failed to send notification", e);
+        }
+    };
+
+    // Auto-request permission on first interaction logic could go here, 
+    // but for now we just respect the current state to avoid crashes.
+    // Ideally, stick a "Enable Notifications" button in UI, but user didn't ask for UI changes.
+    // We will just try to request if not denied, but only once/safely.
+
+    useEffect(() => {
+        if (permission === 'default' && "Notification" in window) {
+            // Some mobile browsers crash if you call this without user gesture.
+            // Safe to skip auto-request or wrap in try-catch.
+            // decided: skip auto-request on mount to prevent mobile crash. 
+            // Only check permission state.
+        }
+    }, [permission]);
+
 
     useEffect(() => {
         // Wait for permission and data loading
@@ -59,7 +93,7 @@ export function NotificationManager() {
             );
 
             if (missedReminders.length > 0) {
-                new Notification("Missed Reminders", {
+                sendNotification("Missed Reminders", {
                     body: `You have ${missedReminders.length} overdue reminders.`,
                     icon: '/vite.svg'
                 });
@@ -77,7 +111,7 @@ export function NotificationManager() {
 
                 // Notify if within a 1-minute window
                 if (diff < 60000 && !notifiedRef.current.has(reminder.id)) {
-                    new Notification("Reminder", {
+                    sendNotification("Reminder", {
                         body: reminder.title,
                         icon: '/vite.svg',
                         requireInteraction: true
@@ -88,18 +122,22 @@ export function NotificationManager() {
         });
 
         // 3. Check Laundry
-        const lastLaundryNotify = localStorage.getItem('lastLaundryNotify');
-        const today = new Date().toDateString();
+        try {
+            const lastLaundryNotify = localStorage.getItem('lastLaundryNotify');
+            const today = new Date().toDateString();
 
-        if (lastLaundryNotify !== today) {
-            const pendingLaundry = laundryLoads.filter(l => l.status !== 'complete');
-            if (pendingLaundry.length > 0) {
-                new Notification("Laundry Reminder", {
-                    body: `You have ${pendingLaundry.length} pending laundry loads.`,
-                    icon: '/vite.svg'
-                });
-                localStorage.setItem('lastLaundryNotify', today);
+            if (lastLaundryNotify !== today) {
+                const pendingLaundry = laundryLoads.filter(l => l.status !== 'complete');
+                if (pendingLaundry.length > 0) {
+                    sendNotification("Laundry Reminder", {
+                        body: `You have ${pendingLaundry.length} pending laundry loads.`,
+                        icon: '/vite.svg'
+                    });
+                    localStorage.setItem('lastLaundryNotify', today);
+                }
             }
+        } catch (e) {
+            console.warn("Storage access failed", e);
         }
 
     }, [reminders, laundryLoads, permission, isLoading]);

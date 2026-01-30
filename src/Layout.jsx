@@ -4,7 +4,7 @@ import { Toaster } from './Components/ui/toaster';
 export default function Layout({ children }) {
   return (
     <ThemeProvider storageKey="memo-ui-theme">
-      <div className="min-h-screen bg-background text-foreground antialiased transition-colors duration-300">
+      <div className="min-h-[100dvh] bg-background text-foreground antialiased transition-colors duration-300">
         <style>{`
           /* Smooth scrolling */
           html {
